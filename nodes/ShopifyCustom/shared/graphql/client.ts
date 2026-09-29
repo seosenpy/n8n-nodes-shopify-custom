@@ -9,6 +9,7 @@ import type {
 	IWebhookFunctions,
 } from 'n8n-workflow';
 import { NodeOperationError } from 'n8n-workflow';
+import { randomUUID } from 'crypto';
 
 export const SHOPIFY_CUSTOM_ADMIN_CREDENTIAL_NAME = 'shopifyCustomAdminApi';
 export const SHOPIFY_CUSTOM_OAUTH2_CREDENTIAL_NAME = 'shopifyCustomOAuth2Api';
@@ -69,6 +70,27 @@ const SHOPIFY_OAUTH2_HEADER_OPTIONS: IOAuth2Options = {
 	tokenType: 'Bearer',
 	keyToIncludeInAccessTokenHeader: 'X-Shopify-Access-Token',
 };
+
+// Mutations that require @idempotent directive support (Shopify GraphQL API)
+const MUTATIONS_REQUIRING_IDEMPOTENCY = [
+	'inventoryAdjustQuantities',
+	'inventorySetQuantities',
+	'inventoryActivate',
+	'inventoryShipmentReceive',
+	'inventoryShipmentCreate',
+	'inventoryShipmentCreateInTransit',
+	'inventoryShipmentAddItems',
+	'inventoryTransferCreate',
+	'inventoryTransferCreateAsReadyToShip',
+	'inventoryTransferDuplicate',
+	'inventoryTransferSetItems',
+	'inventorySetScheduledChanges',
+	'inventoryMoveQuantities',
+	'inventorySetOnHandQuantities',
+	'locationActivate',
+	'locationDeactivate',
+	'refundCreate',
+];
 
 export function normalizeShopSubdomain(input: string): string {
 	return input.trim().replace(/^https?:\/\//, '').replace(/\.myshopify\.com\/?$/, '');
@@ -230,6 +252,19 @@ function getHttpErrorMessage(error: unknown): string {
 	return String(typedError.message ?? 'Unknown error');
 }
 
+function isMutation(query: string): boolean {
+	const trimmedQuery = query.trim();
+	return /^\s*mutation\s/i.test(trimmedQuery);
+}
+
+function mutationRequiresIdempotency(query: string): boolean {
+	return MUTATIONS_REQUIRING_IDEMPOTENCY.some((mutation) => query.includes(mutation));
+}
+
+function generateIdempotencyKey(): string {
+	return randomUUID();
+}
+
 async function requestClientCredentialsAccessToken(
 	context: ShopifyFunctionContext,
 	credentials: IShopifyCredentialData,
@@ -324,16 +359,33 @@ async function resolveAdminAccessToken(
 	return requestClientCredentialsAccessToken(context, credentials, itemIndex, forceRefresh);
 }
 
+export interface GraphQLExecuteOptions {
+	idempotencyKey?: string;
+	skipIdempotencyGeneration?: boolean;
+}
+
 export async function executeShopifyGraphql<TData = IDataObject>(
 	context: ShopifyFunctionContext,
 	query: string,
 	variables: IDataObject = {},
 	itemIndex = 0,
+	options?: GraphQLExecuteOptions,
 ): Promise<IShopifyGraphQLResponse<TData>> {
 	const { authentication, credentialName, credentials } = await getSelectedShopifyCredentials(
 		context,
 	);
 	const url = buildGraphqlUrl(credentials);
+
+	// Determine if this mutation needs an idempotency key and inject it if required
+	const finalVariables: IDataObject = { ...variables };
+	if (
+		isMutation(query) &&
+		mutationRequiresIdempotency(query) &&
+		!options?.skipIdempotencyGeneration
+	) {
+		finalVariables.idempotencyKey =
+			options?.idempotencyKey || generateIdempotencyKey();
+	}
 
 	if (authentication === 'oAuth2') {
 		try {
@@ -349,7 +401,7 @@ export async function executeShopifyGraphql<TData = IDataObject>(
 					},
 					body: {
 						query,
-						variables,
+						variables: finalVariables,
 					},
 					json: true,
 				},
@@ -388,7 +440,7 @@ export async function executeShopifyGraphql<TData = IDataObject>(
 				},
 				body: {
 					query,
-					variables,
+					variables: finalVariables,
 				},
 				json: true,
 			};

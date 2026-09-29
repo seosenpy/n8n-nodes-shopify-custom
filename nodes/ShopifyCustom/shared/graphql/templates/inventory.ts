@@ -134,8 +134,8 @@ mutation InventoryItemUpdate($id: ID!, $input: InventoryItemInput!) {
 `;
 
 export const INVENTORY_SET_QUANTITIES_MUTATION = `
-mutation InventorySetQuantities($input: InventorySetQuantitiesInput!) {
-	inventorySetQuantities(input: $input) {
+mutation InventorySetQuantities($input: InventorySetQuantitiesInput!, $idempotencyKey: String!) {
+	inventorySetQuantities(input: $input) @idempotent(key: $idempotencyKey) {
 		inventoryAdjustmentGroup {
 			id
 			createdAt
@@ -165,8 +165,8 @@ mutation InventorySetQuantities($input: InventorySetQuantitiesInput!) {
 `;
 
 export const INVENTORY_ADJUST_QUANTITIES_MUTATION = `
-mutation InventoryAdjustQuantities($input: InventoryAdjustQuantitiesInput!) {
-	inventoryAdjustQuantities(input: $input) {
+mutation InventoryAdjustQuantities($input: InventoryAdjustQuantitiesInput!, $idempotencyKey: String!) {
+	inventoryAdjustQuantities(input: $input) @idempotent(key: $idempotencyKey) {
 		inventoryAdjustmentGroup {
 			id
 			createdAt
@@ -191,6 +191,22 @@ mutation InventoryAdjustQuantities($input: InventoryAdjustQuantitiesInput!) {
 			message
 			code
 		}
+	}
+}
+`;
+
+export const INVENTORY_ACTIVATE_MUTATION = `
+mutation InventoryActivate($inventoryItemId: ID!, $locationId: ID!) {
+	inventoryActivate(inventoryItemId: $inventoryItemId, locationId: $locationId) @idempotent(key: $idempotencyKey) {
+		inventoryLevel {
+			id
+			quantities(names: ["available", "committed", "damaged", "incoming", "on_hand", "quality_assurance", "reserved", "safety_stock"]) {
+				id
+				name
+				quantity
+			}
+		}
+		${USER_ERRORS_FIELDS}
 	}
 }
 `;

@@ -1,6 +1,6 @@
 {
-	"name": "n8n-nodes-shopify-custom",
-	"version": "2.0.42",
+	"name": "@zewb/n8n-nodes-shopify-custom-beta",
+	"version": "2.0.43",
 	"description": "Shopify Admin GraphQL custom node for n8n with full metafield workflow",
 	"license": "MIT",
 	"homepage": "https://github.com/seosen-py/n8n-nodes-shopify-custom",
@@ -33,8 +33,7 @@
 		"prepublishOnly": "npm run lint && npm run build"
 	},
 	"publishConfig": {
-		"access": "public",
-		"tag": "demo"
+		"access": "public"
 	},
 	"files": [
 		"dist"
